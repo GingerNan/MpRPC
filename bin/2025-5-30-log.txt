@@ -1,0 +1,4 @@
+15:44:44 [ERROR] first log message
+15:44:44 [INFO] /home/book/projects/mprpc/example/callee/friendservice.cc:main:48
+15:44:44 [INFO] service_name:FriendServiceRpc
+15:44:44 [INFO] method_name:GetFriendsList

@@ -34,11 +34,14 @@ Logger::Logger()
             std::string msg = m_lckQue.Pop();
 
             char time_buf[64] = {0};
-            strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", localTime);
-            msg.insert(0, "[" + std::string(time_buf) + "] ");
+            sprintf(time_buf, "%02d:%02d:%02d [%s] ", 
+                    localTime->tm_hour, 
+                    localTime->tm_min, 
+                    localTime->tm_sec,
+                    (m_logLevel == INFO) ? "INFO" : "ERROR"
+                    );
+            msg.insert(0, std::string(time_buf));
             msg.append("\n");
-
-            std::cout << "Log message: " << msg;
 
             fputs(msg.c_str(), fp);
             fclose(fp);
