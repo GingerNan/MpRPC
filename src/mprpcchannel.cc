@@ -1,6 +1,7 @@
 #include "mprpcchannel.h"
 #include "mprpcapplication.h"
 #include "rpcheader.pb.h"
+#include "mprpccontroller.h"
 #include <string>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -8,6 +9,7 @@
 #include <error.h>
 #include <netinet/in.h>
 #include <unistd.h>
+
 
 /*
 header_size + service_name method_name args_size + args
@@ -31,7 +33,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     }
     else
     {
-        std::cout << "serialize request error!" << std::endl;
+        controller->SetFailed("serialize request error!");
         return;
     }
 
@@ -49,7 +51,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     }
     else
     {
-        std::cout << "serialize rpc header error!" << std::endl;
+        controller->SetFailed("serialize rpc header error!");
         return;
     }
 
@@ -72,7 +74,10 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     int clientfd = socket(AF_INET, SOCK_STREAM, 0);
     if (-1 == clientfd)
     {
-        std::cout << "create socket error! errno:" << errno << std::endl;
+        char errtxt[512] = {0};
+        sprintf(errtxt, "create socket error! errno:%d, errstr:%s", errno, strerror(errno));
+        controller->SetFailed(errtxt);
+        return;
     }
 
     std::string ip = MprpcApplication::GetInstance().GetConfig().Load("rpcserverip");
@@ -85,14 +90,20 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
 
     if (-1 == connect(clientfd, (struct sockaddr*)&server_addr, sizeof(server_addr)))
     {
-        std::cout << "connect error! errno:" << errno << std::endl;
-        exit(EXIT_FAILURE);
+        char errtxt[512] = {0};
+        sprintf(errtxt, "connect to rpc server error! errno:%d, errstr:%s", errno, strerror(errno));
+        controller->SetFailed(errtxt);
+        close(clientfd);
+        return;
     }
 
     // 发送rpc请求
     if (-1 == send(clientfd, send_rpc_str.c_str(), send_rpc_str.size(), 0))
     {
-        std::cout << "send error! errno:" << errno << std::endl;
+        char errtxt[512] = {0};
+        sprintf(errtxt, "send rpc request error! errno:%d, errstr:%s", errno, strerror(errno));
+        controller->SetFailed(errtxt);
+        close(clientfd);
         return;
     }
 
@@ -101,25 +112,21 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     int recv_size = 0;
     if (-1 == (recv_size = recv(clientfd, recv_buf, 1024, 0)))
     {
-        std::cout << "recv error! errno:" << errno << std::endl;
+        char errtxt[512] = {0};
+        sprintf(errtxt, "recv rpc response error! errno:%d, errstr:%s", errno, strerror(errno));
+        controller->SetFailed(errtxt);
         return;
-    }
-
-    if (recv_size == 0)
-    {
-        perror("");
     }
 
     // 反序列化rpc调用的响应数据
-    //std::string response_str(recv_buf, 0, recv_size);   // bug出现问题，recv_buf中遇到\0后面的数据就存不下来了，导致反序列化失败
-    //if (!response->ParseFromString(response_str))
-
-    // BUG 没有阻塞到数据
     if (!response->ParseFromArray(recv_buf, recv_size))
     {
-        std::cout << "parse error! response_str:" << recv_buf << std::endl;
+        char errtxt[512] = {0};
+        sprintf(errtxt, "parse rpc response error! recv_size:%s", recv_buf);
+        controller->SetFailed(errtxt);
         close(clientfd);
         return;
     }
+
     close(clientfd);
 }
