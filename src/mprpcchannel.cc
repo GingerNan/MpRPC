@@ -3,6 +3,7 @@
 #include "mprpcapplication.h"
 #include "rpcheader.pb.h"
 #include "mprpccontroller.h"
+#include "zookeeperutil.h"
 
 #include <string>
 #include <sys/types.h>
@@ -82,8 +83,31 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
         return;
     }
 
-    std::string ip = MprpcApplication::GetInstance().GetConfig().Load("rpcserverip");
-    uint16_t port = atoi(MprpcApplication::GetInstance().GetConfig().Load("rpcserverport").c_str());
+    // 读取配置文件rpcserver的信息
+    //std::string ip = MprpcApplication::GetInstance().GetConfig().Load("rpcserverip");
+    //uint16_t port = atoi(MprpcApplication::GetInstance().GetConfig().Load("rpcserverport").c_str());
+
+    // rpc调用方像调用service_name的method_name服务，需要查询zk上该服务所在的host的信息
+    ZKClient zkCli;
+    zkCli.Start();
+    // /UserServiceRpc/Login
+    std::string method_path = "/" + service_name + "/" + method_name;
+    std::string host_data = zkCli.GetData(method_path.c_str());
+    // 127.0.0.1:8000
+    if (host_data == "")
+    {
+        controller->SetFailed(method_path + " is not exist!");
+        return;
+    }
+
+    int idx = host_data.find(":");
+    if (idx == -1)
+    {
+        controller->SetFailed(method_path + " address is invalid!");
+        return;
+    }
+    std::string ip = host_data.substr(0, idx);
+    uint16_t port = atoi(host_data.substr(idx+1, host_data.size()-idx).c_str());
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -115,7 +139,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     if (-1 == (recv_size = recv(clientfd, recv_buf, 1024, 0)))
     {
         char errtxt[512] = {0};
-        sprintf(errtxt, "recv rpc response error! errno:%d, errstr:%s", errno, strerror(errno));
+        sprintf(errtxt, "recv rpc response error! errno:%d, errstr: %s", errno, strerror(errno));
         controller->SetFailed(errtxt);
         return;
     }
@@ -124,7 +148,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     if (!response->ParseFromArray(recv_buf, recv_size))
     {
         char errtxt[512] = {0};
-        snprintf(errtxt, sizeof errtxt, "parse rpc response error! recv_size:%s", recv_buf);
+        sprintf(errtxt, "parse rpc response error! recv_size: %s", recv_buf);
         controller->SetFailed(errtxt);
         close(clientfd);
         return;
