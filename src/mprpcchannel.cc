@@ -1,7 +1,9 @@
 #include "mprpcchannel.h"
+
 #include "mprpcapplication.h"
 #include "rpcheader.pb.h"
 #include "mprpccontroller.h"
+
 #include <string>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -122,7 +124,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor *method,
     if (!response->ParseFromArray(recv_buf, recv_size))
     {
         char errtxt[512] = {0};
-        sprintf(errtxt, "parse rpc response error! recv_size:%s", recv_buf);
+        snprintf(errtxt, sizeof errtxt, "parse rpc response error! recv_size:%s", recv_buf);
         controller->SetFailed(errtxt);
         close(clientfd);
         return;

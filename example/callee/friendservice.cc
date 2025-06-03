@@ -2,7 +2,7 @@
 
 #include "friend.pb.h"
 #include "mprpcapplication.h"
-#include "rpcprovider.h"
+#include "mprpcprovider.h"
 #include "logger.h"
 
 #include <vector>
